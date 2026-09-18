@@ -324,13 +324,13 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
         {/* Persistent dark scrim + vignette so the animated photo reads moody
             and legible everywhere it shows through — identical from the Hero
             all the way down; the footer's own solid background covers it. */}
-        <div className="absolute inset-0 bg-black/45" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-black/55" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
         <div
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(120% 100% at 50% 15%, transparent 30%, rgba(0,0,0,0.65) 100%)',
+              'radial-gradient(120% 100% at 50% 15%, transparent 25%, rgba(0,0,0,0.75) 100%)',
           }}
         />
       </div>
@@ -484,14 +484,14 @@ function Hero({ trackRef }) {
               <span className="mb-6 inline-block rounded-full border border-gold/30 bg-gold/10 px-4 py-1.5 text-xs uppercase tracking-[0.2em] text-gold">
                 Direito Previdenciário
               </span>
-              <h1 className="mb-5 font-display text-4xl leading-[1.1] text-white md:text-6xl">
+              <h1 className="mb-5 font-display text-4xl leading-[1.18] text-white md:text-6xl">
                 Garantimos o direito que você merece com empatia e excelência.
               </h1>
-              <p className="mb-4 max-w-md text-base text-white/70 md:text-lg">
+              <p className="mb-4 max-w-md text-base text-white/85 md:text-lg">
                 Assessoria jurídica dedicada aos seus direitos junto ao INSS — do primeiro
                 atendimento até a conquista do seu benefício.
               </p>
-              <p className="mb-8 text-xs uppercase tracking-wide text-white/45">
+              <p className="mb-8 text-xs uppercase tracking-wide text-white/70">
                 Também atuamos em Trabalhista · Consumidor · Família
               </p>
               <div className="flex flex-wrap items-center gap-4">
@@ -513,7 +513,7 @@ function Hero({ trackRef }) {
             </motion.div>
           </div>
 
-          <div className="flex shrink-0 flex-col items-center gap-3 py-6 text-white/60">
+          <div className="flex shrink-0 flex-col items-center gap-3 py-6 text-white/75">
             <span className="max-w-[80%] text-center text-xs uppercase tracking-[0.15em] md:tracking-[0.3em]">
               Empatia, técnica e excelência em cada etapa
             </span>
@@ -536,12 +536,12 @@ function Hero({ trackRef }) {
 
 function StatsBar() {
   return (
-    <section className="relative px-6 py-16 md:py-20">
+    <section className="relative px-6 py-20 md:py-24">
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 md:grid-cols-4">
         {STATS.map((s) => (
           <div key={s.label} className="text-center">
             <div className="font-display text-3xl text-gold md:text-4xl">{s.value}</div>
-            <div className="mt-2 text-xs leading-relaxed text-ink-muted md:text-sm">
+            <div className="mt-2 text-xs leading-relaxed text-white/75 md:text-sm">
               {s.label}
             </div>
           </div>
@@ -595,7 +595,7 @@ function AreasSection() {
           <h2 className="mt-3 font-display text-3xl text-white md:text-4xl">
             Áreas de Atuação
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-ink-muted">
+          <p className="mx-auto mt-4 max-w-xl text-white/75">
             Direito Previdenciário é a nossa especialidade, mas também atuamos nas áreas
             Trabalhista, do Consumidor e de Família.
           </p>
@@ -616,7 +616,7 @@ function AreasSection() {
 
 function MediaSection() {
   return (
-    <section className="relative px-6 py-16 md:py-24">
+    <section className="relative px-6 py-20 md:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col items-start gap-6 rounded-3xl border border-white/10 bg-surface p-8 backdrop-blur-md md:flex-row md:items-center md:gap-8 md:p-10">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gold/10 text-gold">
@@ -768,7 +768,9 @@ function AutoridadeCard() {
       <div className="flex flex-1 flex-col justify-between p-8">
         <div>
           <Badge icon={Award}>Autoridade Jurídica</Badge>
-          <h3 className="mb-1 mt-4 font-display text-2xl text-white">Dr. Arthur Câmara</h3>
+          <h3 className="mb-1 mt-4 font-display text-2xl text-white md:text-3xl">
+            Dr. Arthur Câmara
+          </h3>
           <p className="mb-4 text-sm text-gold">Advogado Responsável</p>
           <p className="text-sm leading-relaxed text-ink-muted">
             Condução estratégica de cada caso, com rigor técnico e olhar humano, para garantir
@@ -807,7 +809,7 @@ function ProvaSocialCard() {
         {TESTIMONIALS.map((t) => (
           <div key={t.name} className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
             <Quote size={14} className="mb-2 text-gold/60" />
-            <p className="mb-2 text-xs leading-relaxed text-ink-muted">&ldquo;{t.text}&rdquo;</p>
+            <p className="mb-2 text-sm leading-relaxed text-ink-muted">&ldquo;{t.text}&rdquo;</p>
             <span className="text-xs font-semibold text-white">{t.name}</span>
           </div>
         ))}
@@ -860,7 +862,7 @@ function BentoGrid() {
   return (
     <section className="relative px-6 py-24 md:py-32">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-14 text-center">
+        <div className="mb-14 max-w-xl">
           <span className="text-xs uppercase tracking-[0.25em] text-gold">
             Por que escolher a Reis & Pacheco
           </span>
