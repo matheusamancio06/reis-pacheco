@@ -212,15 +212,22 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
   // Scrub the video's currentTime to match scroll position across the whole
   // hero -> areas -> bento (Unidade) span, then hold on the last frame — the
   // background stays visible everywhere (the footer's solid color covers it).
+  //
+  // Instead of snapping currentTime straight to the scroll-derived target on
+  // each scroll event (which reads as jumping between stills whenever the
+  // user scrolls in bursts, e.g. mouse-wheel ticks or a fast trackpad
+  // swipe), this runs a continuous rAF loop that eases currentTime toward
+  // the target a little every frame. That turns any burst of scroll input
+  // into one fluid, continuous glide through the footage.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || videoFailed) return;
-    let ticking = false;
+    let rafId;
 
-    function render() {
+    function getTargetTime() {
       const track = trackRef.current;
       const scrubEnd = scrubEndRef.current;
-      if (!track || !scrubEnd || !video.duration) return;
+      if (!track || !scrubEnd || !video.duration) return null;
 
       const docTop = (el) => el.getBoundingClientRect().top + window.scrollY;
       const scrubStartY = docTop(track);
@@ -228,30 +235,24 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
       const scrubRange = scrubEndY - scrubStartY;
       const progress =
         scrubRange > 0 ? clamp((window.scrollY - scrubStartY) / scrubRange, 0, 1) : 0;
+      return progress * video.duration;
+    }
 
-      const targetTime = progress * video.duration;
-      if (Math.abs(video.currentTime - targetTime) > 0.033) {
-        video.currentTime = targetTime;
+    function loop() {
+      const target = getTargetTime();
+      if (target !== null) {
+        const delta = target - video.currentTime;
+        if (Math.abs(delta) > 0.004) {
+          // Ease a fraction of the remaining distance each frame (~60fps),
+          // rather than jumping straight to the target.
+          video.currentTime += delta * 0.16;
+        }
       }
+      rafId = requestAnimationFrame(loop);
     }
+    rafId = requestAnimationFrame(loop);
 
-    function requestRender() {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        render();
-        ticking = false;
-      });
-    }
-
-    render();
-    window.addEventListener('scroll', requestRender, { passive: true });
-    window.addEventListener('resize', requestRender);
-
-    return () => {
-      window.removeEventListener('scroll', requestRender);
-      window.removeEventListener('resize', requestRender);
-    };
+    return () => cancelAnimationFrame(rafId);
   }, [videoFailed, trackRef, scrubEndRef]);
 
   return (
