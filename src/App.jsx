@@ -30,7 +30,8 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const HERO_VIDEO_SRC = '/hero-bg.mp4';
+const HERO_FRAME_COUNT = 120;
+const heroFrameSrc = (i) => `/hero-frames/f-${String(i).padStart(3, '0')}.webp`;
 
 const WHATSAPP_NUMBER = '5581989736054';
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
@@ -158,85 +159,88 @@ function LoadingScreen({ progress }) {
 }
 
 function ScrollCanvas({ trackRef, scrubEndRef }) {
-  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const imagesRef = useRef([]);
+  const fallbackRef = useRef(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [videoFailed, setVideoFailed] = useState(false);
+  const isLoadingRef = useRef(true);
 
-  // Preload the background video and track buffering progress for the
-  // loading screen; fall back to a plain gradient if it can't load at all.
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  // Preload every frame up front, tolerating individual failures. Canvas
+  // drawImage() of an already-decoded bitmap is effectively instant, which
+  // is the whole point versus seeking a <video> element: there is no
+  // per-frame decode latency to fight, so the motion can be exactly as
+  // smooth as the easing driving it.
+  useEffect(() => {
     let cancelled = false;
+    let loaded = 0;
+    let errors = 0;
+    const imgs = [];
 
-    const updateProgress = () => {
-      if (cancelled || !video.duration) return;
-      const buffered = video.buffered;
-      if (buffered.length > 0) {
-        const bufferedEnd = buffered.end(buffered.length - 1);
-        setLoadProgress(Math.min(100, Math.round((bufferedEnd / video.duration) * 100)));
-      }
-    };
-    const handleReady = () => {
-      if (cancelled) return;
-      setLoadProgress(100);
-      setIsLoading(false);
-    };
-    const handleError = () => {
-      if (cancelled) return;
-      setVideoFailed(true);
-      setIsLoading(false);
-    };
-    // Safety net: some browsers are slow to fire canplaythrough even once
-    // there's more than enough buffered to start scrubbing smoothly.
-    const safetyTimer = setTimeout(() => {
-      if (!cancelled && video.readyState >= 2) handleReady();
-    }, 4000);
-
-    video.addEventListener('progress', updateProgress);
-    video.addEventListener('loadeddata', updateProgress);
-    video.addEventListener('canplaythrough', handleReady);
-    video.addEventListener('error', handleError);
+    for (let i = 1; i <= HERO_FRAME_COUNT; i += 1) {
+      const img = new Image();
+      img.decoding = 'async';
+      const settle = () => {
+        if (cancelled) return;
+        loaded += 1;
+        setLoadProgress(Math.round((loaded / HERO_FRAME_COUNT) * 100));
+        if (loaded === HERO_FRAME_COUNT) {
+          fallbackRef.current = errors / HERO_FRAME_COUNT > 0.4;
+          setIsLoading(false);
+        }
+      };
+      img.onload = settle;
+      img.onerror = () => {
+        errors += 1;
+        settle();
+      };
+      img.src = heroFrameSrc(i);
+      imgs.push(img);
+    }
+    imagesRef.current = imgs;
 
     return () => {
       cancelled = true;
-      clearTimeout(safetyTimer);
-      video.removeEventListener('progress', updateProgress);
-      video.removeEventListener('loadeddata', updateProgress);
-      video.removeEventListener('canplaythrough', handleReady);
-      video.removeEventListener('error', handleError);
     };
   }, []);
 
-  // Scrub the video's currentTime to match scroll position across the whole
-  // hero -> areas -> bento (Unidade) span, then hold on the last frame — the
-  // background stays visible everywhere (the footer's solid color covers it).
-  //
-  // Instead of snapping currentTime straight to the scroll-derived target on
-  // each scroll event (which reads as jumping between stills whenever the
-  // user scrolls in bursts, e.g. mouse-wheel ticks or a fast trackpad
-  // swipe), this runs a continuous rAF loop that eases currentTime toward
-  // the target every frame. The easing is time-based (a fixed half-life in
-  // milliseconds, not a fixed fraction per frame) and deliberately fast:
-  // a slow ease feels smoother frame-to-frame, but during a fast scroll it
-  // falls further and further behind the target, and that debt then has to
-  // be paid off in a rushed "catch-up" jump the instant the user stops
-  // scrolling — which is exactly the hard cut this was meant to fix, and it
-  // was most visible at the end of the scrub range simply because that is
-  // where people most often stop. A short half-life keeps the lag too small
-  // to ever notice, even scrolling at speed, while still smoothing out the
-  // instant "teleport" of a single wheel tick.
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || videoFailed) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
     let rafId;
     let lastTimestamp = null;
+    // Continuous, eased frame position — e.g. 42.7 means "70% of the way
+    // between frame 42 and frame 43" — which lets render() cross-fade the
+    // two neighbouring frames for genuine sub-frame smoothness, instead of
+    // snapping between whole frames.
+    let framePos = 0;
 
-    function getTargetTime() {
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+    }
+
+    function drawCover(img) {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+      const drawW = img.naturalWidth * scale;
+      const drawH = img.naturalHeight * scale;
+      ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
+    }
+
+    function getTargetPos() {
       const track = trackRef.current;
       const scrubEnd = scrubEndRef.current;
-      if (!track || !scrubEnd || !video.duration) return null;
+      if (!track || !scrubEnd) return null;
 
       const docTop = (el) => el.getBoundingClientRect().top + window.scrollY;
       const scrubStartY = docTop(track);
@@ -244,47 +248,83 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
       const scrubRange = scrubEndY - scrubStartY;
       const progress =
         scrubRange > 0 ? clamp((window.scrollY - scrubStartY) / scrubRange, 0, 1) : 0;
-      // Never target the exact last frame — seeking flush against the end
-      // of a video is where browsers are most likely to stall or skip.
-      return Math.min(progress * video.duration, video.duration - 0.08);
+      return progress * (HERO_FRAME_COUNT - 1);
     }
 
+    function render() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      if (fallbackRef.current) {
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, '#0e1722');
+        grad.addColorStop(0.5, '#131f2c');
+        grad.addColorStop(1, '#080e14');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        return;
+      }
+      if (isLoadingRef.current) return;
+
+      const lower = Math.max(0, Math.min(HERO_FRAME_COUNT - 1, Math.floor(framePos)));
+      const upper = Math.min(HERO_FRAME_COUNT - 1, lower + 1);
+      const frac = framePos - lower;
+      const imgA = imagesRef.current[lower];
+      const imgB = imagesRef.current[upper];
+
+      ctx.filter = 'contrast(1.08) saturate(1.12) brightness(1.02)';
+      if (imgA && imgA.complete && imgA.naturalWidth > 0) {
+        ctx.globalAlpha = 1;
+        drawCover(imgA);
+      }
+      if (upper !== lower && frac > 0.008 && imgB && imgB.complete && imgB.naturalWidth > 0) {
+        ctx.globalAlpha = frac;
+        drawCover(imgB);
+      }
+      ctx.globalAlpha = 1;
+      ctx.filter = 'none';
+    }
+
+    // Same fast, time-based easing (fixed half-life, not a fixed fraction
+    // per frame) proven on the video version: it converges too quickly for
+    // scroll speed to ever build up a noticeable lag, so nothing has to
+    // "catch up" abruptly when the user stops scrolling.
     function loop(timestamp) {
       const dt = lastTimestamp === null ? 16.67 : timestamp - lastTimestamp;
       lastTimestamp = timestamp;
 
-      const target = getTargetTime();
+      const target = getTargetPos();
       if (target !== null) {
-        const delta = target - video.currentTime;
-        if (Math.abs(delta) > 0.004) {
+        const delta = target - framePos;
+        if (Math.abs(delta) > 0.0006) {
           const HALF_LIFE_MS = 28;
           const factor = 1 - Math.pow(0.5, dt / HALF_LIFE_MS);
-          video.currentTime += delta * factor;
+          framePos += delta * factor;
+        } else {
+          framePos = target;
         }
       }
+      render();
       rafId = requestAnimationFrame(loop);
     }
-    rafId = requestAnimationFrame(loop);
 
-    return () => cancelAnimationFrame(rafId);
-  }, [videoFailed, trackRef, scrubEndRef]);
+    resize();
+    render();
+    rafId = requestAnimationFrame(loop);
+    window.addEventListener('resize', resize);
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(rafId);
+    };
+  }, [isLoading, trackRef, scrubEndRef]);
 
   return (
     <>
       <div className="pointer-events-none fixed inset-0 -z-10">
-        {videoFailed ? (
-          <div className="h-full w-full bg-gradient-to-br from-[#0e1722] via-[#131f2c] to-[#080e14]" />
-        ) : (
-          <video
-            ref={videoRef}
-            className="h-full w-full object-cover"
-            src={HERO_VIDEO_SRC}
-            muted
-            playsInline
-            preload="auto"
-          />
-        )}
-        {/* Persistent dark scrim + vignette so the video reads moody and
+        <canvas ref={canvasRef} className="h-full w-full" />
+        {/* Persistent dark scrim + vignette so the footage reads moody and
             legible everywhere it shows through — identical from the Hero
             all the way down; the footer's own solid background covers it. */}
         <div className="absolute inset-0 bg-black/55" />
