@@ -30,7 +30,7 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const HERO_FRAME_COUNT = 120;
+const HERO_FRAME_COUNT = 240;
 const heroFrameSrc = (i) => `/hero-frames/f-${String(i).padStart(3, '0')}.webp`;
 
 const WHATSAPP_NUMBER = '5581989736054';
@@ -267,23 +267,21 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
       }
       if (isLoadingRef.current) return;
 
-      const lower = Math.max(0, Math.min(HERO_FRAME_COUNT - 1, Math.floor(framePos)));
-      const upper = Math.min(HERO_FRAME_COUNT - 1, lower + 1);
-      const frac = framePos - lower;
-      const imgA = imagesRef.current[lower];
-      const imgB = imagesRef.current[upper];
+      // Always draw a single, sharp source frame — never blend two frames
+      // together. Cross-fading looks like smoothing in theory, but with
+      // real motion between frames it shows up as visible double-exposure
+      // ghosting/blur instead. At the full native 240-frame set the jump
+      // between any two neighbouring frames is already small enough that
+      // snapping to the nearest one (driven by the same fast easing) reads
+      // as clean, continuous motion with no blur.
+      const index = Math.max(0, Math.min(HERO_FRAME_COUNT - 1, Math.round(framePos)));
+      const img = imagesRef.current[index];
 
-      ctx.filter = 'contrast(1.08) saturate(1.12) brightness(1.02)';
-      if (imgA && imgA.complete && imgA.naturalWidth > 0) {
-        ctx.globalAlpha = 1;
-        drawCover(imgA);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.filter = 'contrast(1.08) saturate(1.12) brightness(1.02)';
+        drawCover(img);
+        ctx.filter = 'none';
       }
-      if (upper !== lower && frac > 0.008 && imgB && imgB.complete && imgB.naturalWidth > 0) {
-        ctx.globalAlpha = frac;
-        drawCover(imgB);
-      }
-      ctx.globalAlpha = 1;
-      ctx.filter = 'none';
     }
 
     // Same fast, time-based easing (fixed half-life, not a fixed fraction
