@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu,
@@ -30,8 +30,7 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const TOTAL_FRAMES = 121;
-const frameSrc = (i) => `/frames/ezgif-frame-${String(i).padStart(3, '0')}.jpg`;
+const HERO_VIDEO_SRC = '/hero-bg.mp4';
 
 const WHATSAPP_NUMBER = '5581989736054';
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
@@ -159,128 +158,80 @@ function LoadingScreen({ progress }) {
 }
 
 function ScrollCanvas({ trackRef, scrubEndRef }) {
-  const wrapperRef = useRef(null);
-  const canvasRef = useRef(null);
-  const imagesRef = useRef([]);
-  const fallbackRef = useRef(false);
-  const lastFrameRef = useRef(-1);
+  const videoRef = useRef(null);
   const [loadProgress, setLoadProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const isLoadingRef = useRef(true);
+  const [videoFailed, setVideoFailed] = useState(false);
 
+  // Preload the background video and track buffering progress for the
+  // loading screen; fall back to a plain gradient if it can't load at all.
   useEffect(() => {
-    isLoadingRef.current = isLoading;
-  }, [isLoading]);
-
-  // Preload all 121 frames, tolerating individual failures.
-  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
     let cancelled = false;
-    let loaded = 0;
-    let errors = 0;
-    const imgs = [];
 
-    for (let i = 1; i <= TOTAL_FRAMES; i += 1) {
-      const img = new Image();
-      img.decoding = 'async';
-      const settle = () => {
-        if (cancelled) return;
-        loaded += 1;
-        setLoadProgress(Math.round((loaded / TOTAL_FRAMES) * 100));
-        if (loaded === TOTAL_FRAMES) {
-          fallbackRef.current = errors / TOTAL_FRAMES > 0.4;
-          setIsLoading(false);
-        }
-      };
-      img.onload = settle;
-      img.onerror = () => {
-        errors += 1;
-        settle();
-      };
-      img.src = frameSrc(i);
-      imgs.push(img);
-    }
-    imagesRef.current = imgs;
+    const updateProgress = () => {
+      if (cancelled || !video.duration) return;
+      const buffered = video.buffered;
+      if (buffered.length > 0) {
+        const bufferedEnd = buffered.end(buffered.length - 1);
+        setLoadProgress(Math.min(100, Math.round((bufferedEnd / video.duration) * 100)));
+      }
+    };
+    const handleReady = () => {
+      if (cancelled) return;
+      setLoadProgress(100);
+      setIsLoading(false);
+    };
+    const handleError = () => {
+      if (cancelled) return;
+      setVideoFailed(true);
+      setIsLoading(false);
+    };
+    // Safety net: some browsers are slow to fire canplaythrough even once
+    // there's more than enough buffered to start scrubbing smoothly.
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled && video.readyState >= 2) handleReady();
+    }, 4000);
+
+    video.addEventListener('progress', updateProgress);
+    video.addEventListener('loadeddata', updateProgress);
+    video.addEventListener('canplaythrough', handleReady);
+    video.addEventListener('error', handleError);
 
     return () => {
       cancelled = true;
+      clearTimeout(safetyTimer);
+      video.removeEventListener('progress', updateProgress);
+      video.removeEventListener('loadeddata', updateProgress);
+      video.removeEventListener('canplaythrough', handleReady);
+      video.removeEventListener('error', handleError);
     };
   }, []);
 
-  const drawFrame = useCallback((ctx, canvas, img) => {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-    const drawW = img.naturalWidth * scale;
-    const drawH = img.naturalHeight * scale;
-    const dx = (w - drawW) / 2;
-    const dy = (h - drawH) / 2;
-    ctx.clearRect(0, 0, w, h);
-    ctx.filter = 'contrast(1.08) saturate(1.12) brightness(1.02)';
-    ctx.drawImage(img, dx, dy, drawW, drawH);
-    ctx.filter = 'none';
-  }, []);
-
-  // Fallback: subtle dark gradient with a metallic sweep, in case frames fail
-  // to load (e.g. inside a sandboxed preview without access to /public).
-  const drawFallback = useCallback((ctx, canvas, progress, time) => {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    ctx.clearRect(0, 0, w, h);
-
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, '#0e1722');
-    grad.addColorStop(0.5, '#131f2c');
-    grad.addColorStop(1, '#080e14');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    const sweep = ((progress + time * 0.00006) % 1) * (w + 500) - 250;
-    const shine = ctx.createLinearGradient(sweep - 180, 0, sweep + 180, h);
-    shine.addColorStop(0, 'rgba(212, 175, 55, 0)');
-    shine.addColorStop(0.5, 'rgba(212, 175, 55, 0.12)');
-    shine.addColorStop(1, 'rgba(212, 175, 55, 0)');
-    ctx.fillStyle = shine;
-    ctx.fillRect(0, 0, w, h);
-  }, []);
-
+  // Scrub the video's currentTime to match scroll position across the whole
+  // hero -> areas -> bento (Unidade) span, then hold on the last frame — the
+  // background stays visible everywhere (the footer's solid color covers it).
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const video = videoRef.current;
+    if (!video || videoFailed) return;
     let ticking = false;
 
     function render() {
       const track = trackRef.current;
       const scrubEnd = scrubEndRef.current;
-      if (!track || !scrubEnd) return;
+      if (!track || !scrubEnd || !video.duration) return;
 
-      // offsetTop is relative to each element's own positioned ancestor, which
-      // differs across sections (some sit inside a `relative` <main>) — use the
-      // document-absolute position instead so the ranges are comparable.
       const docTop = (el) => el.getBoundingClientRect().top + window.scrollY;
-
-      // Frames scrub across the whole hero -> areas -> bento (Unidade) span,
-      // then hold on the last frame for the rest of the page — the background
-      // stays visible everywhere (the footer's own solid color covers it).
       const scrubStartY = docTop(track);
       const scrubEndY = docTop(scrubEnd);
       const scrubRange = scrubEndY - scrubStartY;
       const progress =
         scrubRange > 0 ? clamp((window.scrollY - scrubStartY) / scrubRange, 0, 1) : 0;
 
-      if (fallbackRef.current) {
-        drawFallback(ctx, canvas, progress, performance.now());
-      } else if (!isLoadingRef.current) {
-        const frameIndex = Math.round(progress * (TOTAL_FRAMES - 1));
-        const img = imagesRef.current[frameIndex];
-        if (
-          img &&
-          img.complete &&
-          img.naturalWidth > 0 &&
-          frameIndex !== lastFrameRef.current
-        ) {
-          drawFrame(ctx, canvas, img);
-          lastFrameRef.current = frameIndex;
-        }
+      const targetTime = progress * video.duration;
+      if (Math.abs(video.currentTime - targetTime) > 0.033) {
+        video.currentTime = targetTime;
       }
     }
 
@@ -293,36 +244,33 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
       });
     }
 
-    function resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      lastFrameRef.current = -1;
-      render();
-    }
-
-    resize();
+    render();
     window.addEventListener('scroll', requestRender, { passive: true });
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', requestRender);
 
     return () => {
       window.removeEventListener('scroll', requestRender);
-      window.removeEventListener('resize', resize);
+      window.removeEventListener('resize', requestRender);
     };
-  }, [isLoading, drawFrame, drawFallback, trackRef, scrubEndRef]);
+  }, [videoFailed, trackRef, scrubEndRef]);
 
   return (
     <>
-      <div
-        ref={wrapperRef}
-        className="pointer-events-none fixed inset-0 -z-10"
-      >
-        <canvas ref={canvasRef} className="h-full w-full" />
-        {/* Persistent dark scrim + vignette so the animated photo reads moody
-            and legible everywhere it shows through — identical from the Hero
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        {videoFailed ? (
+          <div className="h-full w-full bg-gradient-to-br from-[#0e1722] via-[#131f2c] to-[#080e14]" />
+        ) : (
+          <video
+            ref={videoRef}
+            className="h-full w-full object-cover"
+            src={HERO_VIDEO_SRC}
+            muted
+            playsInline
+            preload="auto"
+          />
+        )}
+        {/* Persistent dark scrim + vignette so the video reads moody and
+            legible everywhere it shows through — identical from the Hero
             all the way down; the footer's own solid background covers it. */}
         <div className="absolute inset-0 bg-black/55" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
