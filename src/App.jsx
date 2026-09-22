@@ -217,12 +217,21 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
   // each scroll event (which reads as jumping between stills whenever the
   // user scrolls in bursts, e.g. mouse-wheel ticks or a fast trackpad
   // swipe), this runs a continuous rAF loop that eases currentTime toward
-  // the target a little every frame. That turns any burst of scroll input
-  // into one fluid, continuous glide through the footage.
+  // the target every frame. The easing is time-based (a fixed half-life in
+  // milliseconds, not a fixed fraction per frame) and deliberately fast:
+  // a slow ease feels smoother frame-to-frame, but during a fast scroll it
+  // falls further and further behind the target, and that debt then has to
+  // be paid off in a rushed "catch-up" jump the instant the user stops
+  // scrolling — which is exactly the hard cut this was meant to fix, and it
+  // was most visible at the end of the scrub range simply because that is
+  // where people most often stop. A short half-life keeps the lag too small
+  // to ever notice, even scrolling at speed, while still smoothing out the
+  // instant "teleport" of a single wheel tick.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || videoFailed) return;
     let rafId;
+    let lastTimestamp = null;
 
     function getTargetTime() {
       const track = trackRef.current;
@@ -235,17 +244,22 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
       const scrubRange = scrubEndY - scrubStartY;
       const progress =
         scrubRange > 0 ? clamp((window.scrollY - scrubStartY) / scrubRange, 0, 1) : 0;
-      return progress * video.duration;
+      // Never target the exact last frame — seeking flush against the end
+      // of a video is where browsers are most likely to stall or skip.
+      return Math.min(progress * video.duration, video.duration - 0.08);
     }
 
-    function loop() {
+    function loop(timestamp) {
+      const dt = lastTimestamp === null ? 16.67 : timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+
       const target = getTargetTime();
       if (target !== null) {
         const delta = target - video.currentTime;
         if (Math.abs(delta) > 0.004) {
-          // Ease a fraction of the remaining distance each frame (~60fps),
-          // rather than jumping straight to the target.
-          video.currentTime += delta * 0.16;
+          const HALF_LIFE_MS = 28;
+          const factor = 1 - Math.pow(0.5, dt / HALF_LIFE_MS);
+          video.currentTime += delta * factor;
         }
       }
       rafId = requestAnimationFrame(loop);
