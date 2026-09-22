@@ -30,7 +30,7 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const HERO_FRAME_COUNT = 240;
+const HERO_FRAME_COUNT = 358;
 const heroFrameSrc = (i) => `/hero-frames/f-${String(i).padStart(3, '0')}.webp`;
 
 const WHATSAPP_NUMBER = '5581989736054';
