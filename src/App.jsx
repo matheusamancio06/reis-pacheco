@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Users,
   Tv,
+  Cookie,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -997,6 +998,68 @@ function Footer() {
 }
 
 // ---------------------------------------------------------------------------
+// Cookie consent
+// ---------------------------------------------------------------------------
+
+const COOKIE_CONSENT_KEY = 'rp-cookie-consent';
+
+function CookieConsent() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const consent = window.localStorage.getItem(COOKIE_CONSENT_KEY);
+    if (!consent) setVisible(true);
+  }, []);
+
+  function respond(value) {
+    window.localStorage.setItem(COOKIE_CONSENT_KEY, value);
+    setVisible(false);
+  }
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ y: 40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 40, opacity: 0 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="fixed inset-x-0 bottom-0 z-50 px-4 pb-4 sm:px-6 sm:pb-6"
+        >
+          <div className="mx-auto flex max-w-3xl flex-col gap-4 rounded-2xl border border-white/10 bg-[#0B121A]/95 p-5 shadow-lg shadow-black/30 backdrop-blur-xl sm:flex-row sm:items-center sm:gap-6 sm:p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gold/10 text-gold">
+                <Cookie className="h-4 w-4" />
+              </div>
+              <p className="text-sm leading-relaxed text-ink-muted">
+                Usamos cookies para melhorar sua experiência de navegação e analisar o
+                acesso ao site. Ao continuar, você concorda com o uso de cookies.
+              </p>
+            </div>
+            <div className="flex flex-none items-center gap-3 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => respond('declined')}
+                className="text-sm font-medium text-ink-muted transition-colors hover:text-white"
+              >
+                Recusar
+              </button>
+              <button
+                type="button"
+                onClick={() => respond('accepted')}
+                className="inline-flex items-center justify-center rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-[#0E1722] transition-colors hover:bg-gold-bronze"
+              >
+                Aceitar
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 
@@ -1018,6 +1081,7 @@ export default function App() {
         <FaqSection />
       </main>
       <Footer />
+      <CookieConsent />
     </div>
   );
 }
