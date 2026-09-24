@@ -325,13 +325,13 @@ function ScrollCanvas({ trackRef, scrubEndRef }) {
         {/* Persistent dark scrim + vignette so the footage reads moody and
             legible everywhere it shows through — identical from the Hero
             all the way down; the footer's own solid background covers it. */}
-        <div className="absolute inset-0 bg-black/55" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
+        <div className="absolute inset-0 bg-black/30" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/15 to-transparent" />
         <div
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(120% 100% at 50% 15%, transparent 25%, rgba(0,0,0,0.75) 100%)',
+              'radial-gradient(120% 100% at 50% 15%, transparent 25%, rgba(0,0,0,0.45) 100%)',
           }}
         />
       </div>
